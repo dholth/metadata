@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # Prototype Python metadata parser
 
-import re
 import collections
+import itertools
+import markerlib
+import re
 
 class ParseError(ValueError):
     pass
@@ -41,6 +43,9 @@ class Requirement(object):
             parts.append("(" + str(self.version) + ")")
         return " ".join(parts)
 
+    def __repr__(self):
+        return str(self)
+
 VersionPredicate = collections.namedtuple('VersionPredicate', ['op', 'version'])
 
 class Version(object):
@@ -73,3 +78,72 @@ class Version(object):
 
     def __str__(self):
         return ', '.join(''.join(vp) for vp in self.predicates)
+
+class ListValue(object):
+    def __init__(self, subtype):
+        self.subtype = subtype
+
+    def parse(self, value):
+        assert isinstance(value, list), value
+        items = [self.subtype.parse(item) for item in value]
+        return items
+
+class Conditional(object):
+    def __init__(self, subtype):
+        self.subtype = subtype
+
+    def parse(self, value):
+        assert isinstance(value, dict), value
+        value['values'] = [self.subtype.parse(v) for v in value['values']]
+        value['condition'] = markerlib.compile(value.get('condition', ''))
+        return value
+
+class Verbatim(object):
+    def __init__(self):
+        pass
+
+    def parse(self, value):
+        return value
+
+class Metadata(collections.OrderedDict):
+    """Typed Python distribution metadata."""
+    _parsers = {
+            'requires':ListValue(Requirement).parse,
+            'may-requires':ListValue(Conditional(Requirement)).parse
+            }
+
+    def parse(self, untyped):
+        for key in untyped:
+            self[key] = self._parsers.get(key, lambda x: x)(untyped[key])
+
+    def concrete_requirements(self, extras=(), environment=None, 
+            include_unconditional=True):
+        unconditional = ()
+        if include_unconditional and 'requires' in self:
+            unconditional = ({'values':self['requires']},)
+        return itertools.chain(
+            (r for r in self['may-requires'] 
+                if r['condition'](environment) 
+                and ((not r.get('extra')) or r['extra'] in extras)),
+            unconditional)
+
+    def flat_requirements(self, concrete):
+        """Return a flattened list of requirements without duplicates."""
+        by_name = collections.defaultdict(list)
+        for group in concrete:
+            for r in group['values']:
+                by_name[r.name].append(r)
+        flat = []
+        for name, requirements in by_name.items():
+            all_extras = set()
+            all_version_predicates = set()
+            for r in requirements:
+                all_extras.update(r.extras)
+                if r.version:
+                    all_version_predicates.update(r.version.predicates)
+            version = None
+            if all_version_predicates:
+                version = Version(sorted(all_version_predicates))
+            flat.append(Requirement(name=name, extras=sorted(all_extras), version=version))
+        return flat
+
