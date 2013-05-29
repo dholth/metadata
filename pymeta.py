@@ -14,7 +14,7 @@ class Requirement(object):
         r"""(?P<name>\w+)
             (\s*\[(?P<extras>.*)\])?
             (\s*(\((?P<version>.+)\)|
-             (?P<bw_version>(<|<=|>|>=|==|!=).+)))?""",
+             (?P<bw_version>(<=?|>=?|==|!=).+)))?""",
             re.VERBOSE)
 
     def __init__(self, name=None, extras=None, version=None):
@@ -54,7 +54,7 @@ VersionPredicate = collections.namedtuple('VersionPredicate', ['op', 'version'])
 class Version(object):
     _re = re.compile(
             r"""\s*
-            (?P<op>\<|\>|\<=|\>=|==|!=)?\s*
+            (?P<op><=?|>=?|==|!=)?\s*
             (?P<version>[^\s]+)\s*$
             """,
             re.VERBOSE)
