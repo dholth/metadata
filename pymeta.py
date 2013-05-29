@@ -13,7 +13,8 @@ class Requirement(object):
     _re = re.compile(
         r"""(?P<name>\w+)
             (\s*\[(?P<extras>.*)\])?
-            (\s*\((?P<version>.+)\))?""",
+            (\s*(\((?P<version>.+)\)|
+             (?P<bw_version>(<|<=|>|>=|==|!=).+)))?""",
             re.VERBOSE)
 
     def __init__(self, name=None, extras=None, version=None):
@@ -33,6 +34,8 @@ class Requirement(object):
         version = None
         if groups['version']:
             version = Version.parse(groups['version'])
+        elif groups['bw_version']:
+            version = Version.parse(groups['bw_version'])
         return cls(name=groups['name'], extras=extras, version=version)
 
     def __str__(self):
